@@ -39,7 +39,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
 	curl_command = config.get(CONF_CURL_COMMAND)
 	scan_interval = config.get(CONF_SCAN_INTERVAL)
 	data_type = config.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
-	add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)])
+	add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)], True)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
@@ -47,9 +47,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 	data = entry.data
 	name = data.get(CONF_NAME, DEFAULT_NAME)
 	curl_command = data.get(CONF_CURL_COMMAND)
+	# Backwards compatibility: build curl command if only URL provided
+	if not curl_command and data.get("url"):
+		curl_command = build_curl_command(data.get("url"), data.get("jq_filter"))
+		hass.config_entries.async_update_entry(entry, data={**data, CONF_CURL_COMMAND: curl_command})
 	scan_interval = timedelta(seconds=data.get("scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())))
 	data_type = data.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
-	async_add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)])
+	async_add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)], True)
+
+
+def build_curl_command(url: str | None, jq_filter: str | None) -> str | None:
+	if not url:
+		return None
+	cmd = f"curl -s {url.strip()}"
+	if jq_filter:
+		jq_expr = jq_filter.strip()
+		if jq_expr:
+			cmd += f" | jq -r {jq_expr}"
+	return cmd
 
 
 

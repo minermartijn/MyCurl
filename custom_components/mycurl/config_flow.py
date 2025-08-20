@@ -8,6 +8,7 @@ from .sensor import (
     DATA_TYPE_TEXT,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
+    build_curl_command,
 )
 import subprocess
 import logging
@@ -15,6 +16,9 @@ import logging
 _LOGGER = logging.getLogger(__name__)
 
 CONF_RUN_TEST = "run_test"
+CONF_URL = "url"
+CONF_JQ_FILTER = "jq_filter"
+CONF_ADVANCED = "advanced_mode"
 
 
 class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
@@ -29,7 +33,13 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         errors: dict[str, str] = {}
         if user_input is not None:
             run_test = user_input.get(CONF_RUN_TEST, False)
+            advanced = user_input.get(CONF_ADVANCED, False)
+
+            # Build curl command automatically if not in advanced mode
             curl_cmd = user_input.get(CONF_CURL_COMMAND, "").strip()
+            if not advanced:
+                curl_cmd = build_curl_command(user_input.get(CONF_URL), user_input.get(CONF_JQ_FILTER)) or ""
+                user_input[CONF_CURL_COMMAND] = curl_cmd
 
             if run_test:
                 if curl_cmd:
@@ -51,34 +61,49 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
 
                     self._last_test_output = await self.hass.async_add_executor_job(run_curl)
                 else:
-                    self._last_test_output = "Please enter a curl command first."
+                    self._last_test_output = "Please provide a URL or curl command."
             else:
                 # creating entry path
                 if not curl_cmd:
                     errors[CONF_CURL_COMMAND] = "required"
                 if not errors:
                     data = dict(user_input)
-                    data.pop(CONF_RUN_TEST, None)
+                    for transient in (CONF_RUN_TEST,):
+                        data.pop(transient, None)
                     return self.async_create_entry(title=data[CONF_NAME], data=data)
 
         defaults = user_input or {}
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, DEFAULT_NAME)): str,
-                vol.Required(CONF_CURL_COMMAND, default=defaults.get(CONF_CURL_COMMAND, "")): str,
-                vol.Optional(
-                    CONF_DATA_TYPE,
-                    default=defaults.get(CONF_DATA_TYPE, DATA_TYPE_TEXT),
-                ): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
-                vol.Optional(
-                    "scan_interval",
-                    default=defaults.get(
-                        "scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())
-                    ),
-                ): int,
-                vol.Optional(CONF_RUN_TEST, default=False): bool,
-            }
-        )
+        # Schema branches based on advanced flag (persist selection)
+        advanced_flag = defaults.get(CONF_ADVANCED, False)
+        base_fields = {
+            vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, DEFAULT_NAME)): str,
+            vol.Optional(
+                CONF_DATA_TYPE, default=defaults.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
+            ): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
+            vol.Optional(
+                "scan_interval",
+                default=defaults.get(
+                    "scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())
+                ),
+            ): int,
+            vol.Optional(CONF_RUN_TEST, default=False): bool,
+            vol.Optional(CONF_ADVANCED, default=advanced_flag): bool,
+        }
+        if advanced_flag:
+            base_fields[vol.Required(CONF_CURL_COMMAND, default=defaults.get(CONF_CURL_COMMAND, ""))] = str
+        else:
+            base_fields[vol.Required(CONF_URL, default=defaults.get(CONF_URL, ""))] = str
+            base_fields[vol.Optional(CONF_JQ_FILTER, default=defaults.get(CONF_JQ_FILTER, ""))] = str
+            # Show derived curl command if available
+            if defaults.get(CONF_URL):
+                derived = build_curl_command(defaults.get(CONF_URL), defaults.get(CONF_JQ_FILTER))
+                if derived:
+                    self._last_test_output = (
+                        self._last_test_output
+                        if self._last_test_output
+                        else f"Derived command: {derived}"
+                    )
+        data_schema = vol.Schema(base_fields)
 
         description_placeholders = {"test_output": self._last_test_output or ""}
 
