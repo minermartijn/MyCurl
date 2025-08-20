@@ -4,12 +4,17 @@ from homeassistant.const import CONF_NAME
 from .sensor import CONF_CURL_COMMAND, CONF_DATA_TYPE, DATA_TYPE_NUMERIC, DATA_TYPE_TEXT, DEFAULT_NAME, DEFAULT_SCAN_INTERVAL
 
 
+
 import subprocess
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
     """Handle a config flow for MyCurl."""
 
     VERSION = 1
+
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -20,12 +25,20 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 curl_cmd = user_input.get(CONF_CURL_COMMAND, "").strip()
                 if curl_cmd:
                     try:
-                        result = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True, timeout=10)
-                        if result.returncode == 0:
-                            test_output = result.stdout.strip()
-                        else:
-                            test_output = f"Error: {result.stderr.strip()}"
+                        # Run the command in executor to avoid blocking event loop
+                        def run_curl():
+                            try:
+                                result = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True, timeout=10)
+                                if result.returncode == 0:
+                                    return result.stdout.strip()
+                                else:
+                                    return f"Error: {result.stderr.strip()}"
+                            except Exception as e:
+                                _LOGGER.error("Test command exception: %s", e)
+                                return f"Exception: {e}"
+                        test_output = await self.hass.async_add_executor_job(run_curl)
                     except Exception as e:
+                        _LOGGER.error("Test command async exception: %s", e)
                         test_output = f"Exception: {e}"
                 else:
                     test_output = "Please enter a curl command."
