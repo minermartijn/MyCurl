@@ -1,3 +1,26 @@
+PRESETS = {
+    "OpenWeatherMap": {
+        "name": "OpenWeatherMap",
+        "url": "https://api.openweathermap.org/data/2.5/weather?q=London&appid=YOUR_API_KEY&units=metric",
+        "description": "Weather for a city (replace with your city and API key)",
+        "default_key": "main.temp",
+        "data_type": DATA_TYPE_NUMERIC,
+    },
+    "Coindesk BTC": {
+        "name": "Coindesk BTC Price",
+        "url": "https://api.coindesk.com/v1/bpi/currentprice/BTC.json",
+        "description": "Bitcoin price in USD",
+        "default_key": "bpi.USD.rate_float",
+        "data_type": DATA_TYPE_NUMERIC,
+    },
+    "Philips Hue": {
+        "name": "Philips Hue Lights",
+        "url": "http://bridge_ip/api/username/lights",
+        "description": "Philips Hue lights (replace IP and username)",
+        "default_key": "1.state.on",
+        "data_type": DATA_TYPE_TEXT,
+    },
+}
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
@@ -25,6 +48,55 @@ CONF_CREATE = "create"
 
 
 class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
+    async def async_step_preset(self, user_input=None):
+        """Preset selection step."""
+        if user_input is not None:
+            preset = user_input.get("preset")
+            if preset == "Custom":
+                return await self.async_step_user()
+            # Load preset values
+            preset_data = PRESETS[preset]
+            self._name = preset_data["name"]
+            self._url = preset_data["url"]
+            self._preset_key = preset_data.get("default_key")
+            self._preset_data_type = preset_data.get("data_type", DATA_TYPE_TEXT)
+            return await self.async_step_preset_config()
+        options = list(PRESETS.keys()) + ["Custom"]
+        schema = vol.Schema({vol.Required("preset"): vol.In(options)})
+        return self.async_show_form(
+            step_id="preset",
+            data_schema=schema,
+            description_placeholders={"test_output": "Select a popular API or Custom to enter your own."},
+        )
+
+    async def async_step_preset_config(self, user_input=None):
+        """Configure a preset endpoint."""
+        errors = {}
+        if user_input is not None:
+            # Use preset key and data type
+            jq_filter = self._preset_key
+            data_type = self._preset_data_type
+            scan_interval = user_input.get("scan_interval", 300)
+            data = {
+                CONF_NAME: self._name,
+                CONF_URL: self._url,
+                CONF_JQ_FILTER: f".{jq_filter}" if jq_filter and not jq_filter.startswith(".") else jq_filter,
+                CONF_DATA_TYPE: data_type,
+                "scan_interval": scan_interval,
+            }
+            data[CONF_CURL_COMMAND] = build_curl_command(self._url, data[CONF_JQ_FILTER])
+            return self.async_create_entry(title=data[CONF_NAME], data=data)
+        # Show a simple form for scan interval
+        schema = vol.Schema({
+            vol.Optional("scan_interval", default=300): vol.All(int, vol.Range(min=5, max=3600)),
+        })
+        description = f"Preset: {self._name}\nURL: {self._url}\nKey: {self._preset_key}\nData type: {self._preset_data_type}"
+        return self.async_show_form(
+            step_id="preset_config",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"test_output": description},
+        )
     """Two-step flow: (1) Name+URL, (2) Select key/filter & finalize."""
 
     VERSION = 1
@@ -42,6 +114,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         self._key_filter: str = ""
 
     async def async_step_user(self, user_input=None):  # type: ignore[override]
+        # This is now the custom/manual entry point
         _LOGGER.debug("async_step_user called with user_input: %s", user_input)
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -64,7 +137,10 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 vol.Required(CONF_URL, default=self._url or ""): str,
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors, description_placeholders={"test_output": "Enter a name and URL for your custom endpoint."})
+    async def async_step_init(self, user_input=None):
+        """Entry point: ask for preset or custom."""
+        return await self.async_step_preset()
 
     async def async_step_select(self, user_input=None):  # type: ignore[override]
         _LOGGER.debug("async_step_select called with user_input: %s", user_input)
