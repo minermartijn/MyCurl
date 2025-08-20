@@ -6,9 +6,12 @@ from datetime import timedelta
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
+from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity, async_setup_entry
 from homeassistant.const import CONF_NAME, CONF_COMMAND, CONF_SCAN_INTERVAL
 import homeassistant.helpers.config_validation as cv
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,13 +32,24 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 
+
 def setup_platform(hass, config, add_entities, discovery_info=None):
-	"""Set up the MyCurl sensor platform."""
+	"""Set up the MyCurl sensor platform from YAML."""
 	name = config.get(CONF_NAME)
 	curl_command = config.get(CONF_CURL_COMMAND)
 	scan_interval = config.get(CONF_SCAN_INTERVAL)
 	data_type = config.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
 	add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)])
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+	"""Set up MyCurl sensor from a config entry (UI)."""
+	data = entry.data
+	name = data.get(CONF_NAME, DEFAULT_NAME)
+	curl_command = data.get(CONF_CURL_COMMAND)
+	scan_interval = timedelta(seconds=data.get("scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())))
+	data_type = data.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
+	async_add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)])
 
 
 

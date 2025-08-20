@@ -13,14 +13,25 @@ A Home Assistant custom component that creates sensors based on the output of cu
 ## Features
 - Create sensors that run curl commands and use their output as sensor values.
 
+
 ## Usage
 
 
+### UI-based setup (recommended)
+
+1. Install MyCurl via HACS.
+2. Go to Home Assistant → Settings → Devices & Services → Integrations.
+3. Click "Add Integration" and search for "MyCurl".
+4. Enter the sensor name, curl command, data type (numeric/text), and scan interval in the UI form.
+5. **Test your curl command before saving:** Use the "Test Command" button to run your curl command and see the output. This helps you tweak your jq filter or command to get the exact value you want (e.g. `| jq -r .bpi.USD.rate_float`).
+6. After setup, you can change options (like data type or scan interval) from the UI at any time.
+7. The sensor will be created and managed from the UI—no need to edit configuration.yaml!
+
+### YAML setup (legacy, still supported)
 
 Add an entry like this to your `configuration.yaml`:
 
 ```yaml
-
 # Numeric sensor example (for graphs/statistics)
 sensor:
 	- platform: mycurl

@@ -6,5 +6,6 @@
   "issue_tracker": "https://github.com/minermartijn/MyCurl/issues",
   "requirements": [],
   "dependencies": [],
-  "codeowners": ["@minermartijn"]
+  "codeowners": ["@minermartijn"],
+  "config_flow": true
 }
