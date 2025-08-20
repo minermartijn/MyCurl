@@ -69,7 +69,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         scan_interval = int(DEFAULT_SCAN_INTERVAL.total_seconds())
         jq_filter = ""
         key_select: str | None = None
-    key_filter = self._key_filter
+        key_filter = self._key_filter
 
         if user_input is not None:
             jq_filter = user_input.get(CONF_JQ_FILTER, "").strip()
