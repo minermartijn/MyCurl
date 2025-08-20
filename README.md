@@ -16,19 +16,33 @@ A Home Assistant custom component that creates sensors based on the output of cu
 ## Usage
 
 
+
 Add an entry like this to your `configuration.yaml`:
 
 ```yaml
+
+# Numeric sensor example (for graphs/statistics)
 sensor:
 	- platform: mycurl
 		name: "Bitcoin Price"
+		data_type: numeric
 		curl_command: "curl -s https://api.coindesk.com/v1/bpi/currentprice/BTC.json | jq -r .bpi.USD.rate_float"
+		scan_interval: 300
+
+# Text sensor example (default)
+	- platform: mycurl
+		name: "Example Text"
+		data_type: text
+		curl_command: "echo 'Hello from MyCurl'"
 		scan_interval: 300
 ```
 
-This will create a sensor that fetches the current Bitcoin price in USD every 5 minutes.
+This will create a numeric sensor (for graphs/statistics) and a text sensor (for plain text values).
 
-**Note:** You can use any curl command that outputs a value. Make sure any required tools (like `jq`) are installed on your Home Assistant system.
+**Note:**
+- Use `data_type: numeric` for sensors you want to graph or use in statistics (output must be a number).
+- Use `data_type: text` (or omit) for sensors that return text.
+- Make sure any required tools (like `jq`) are installed on your Home Assistant system.
 
 ## HACS Compatibility
 This repository is structured for HACS installation.
