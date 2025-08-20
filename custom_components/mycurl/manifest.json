@@ -2,7 +2,8 @@
   "domain": "mycurl",
   "name": "MyCurl",
   "version": "0.0.1",
-  "documentation": "https://github.com/minermartijn/HA_Curl_Plugin",
+  "documentation": "https://github.com/minermartijn/MyCurl",
+  "issue_tracker": "https://github.com/minermartijn/MyCurl/issues",
   "requirements": [],
   "dependencies": [],
   "codeowners": ["@minermartijn"]
