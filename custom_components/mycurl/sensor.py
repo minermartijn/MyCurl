@@ -62,7 +62,8 @@ def build_curl_command(url: str | None, jq_filter: str | None) -> str | None:
 	cmd = f"curl -s {url.strip()}"
 	if jq_filter:
 		jq_expr = jq_filter.strip()
-		if jq_expr:
+		# Only append jq if filter is not empty and not just '.'
+		if jq_expr and jq_expr != ".":
 			cmd += f" | jq -r {jq_expr}"
 	return cmd
 

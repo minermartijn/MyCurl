@@ -483,7 +483,8 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                         self._pending_finalize = True
 
             # Finalize if we have a filter
-            if jq_filter:
+            # Only allow valid jq_filter (not empty or just '.')
+            if jq_filter and jq_filter != ".":
                 value_preview = self._apply_filter(jq_filter)
                 if value_preview is not None:
                     self._last_filter_value = str(value_preview)[:400]
@@ -496,10 +497,20 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                         CONF_SCAN_INTERVAL: scan_interval,
                     }
                     data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
-                    
                     return self.async_create_entry(title=data[CONF_NAME], data=data)
                 else:
                     errors[CONF_JQ_FILTER] = "Filter returned no value"
+            elif not jq_filter or jq_filter == ".":
+                # No filter: treat as raw output, do not pass jq_filter
+                data = {
+                    CONF_NAME: self._name or DEFAULT_NAME,
+                    CONF_URL: self._url,
+                    CONF_JQ_FILTER: "",
+                    CONF_DATA_TYPE: data_type,
+                    CONF_SCAN_INTERVAL: scan_interval,
+                }
+                data[CONF_CURL_COMMAND] = build_curl_command(self._url, "")
+                return self.async_create_entry(title=data[CONF_NAME], data=data)
 
         # Build form schema
         schema_fields = {}
