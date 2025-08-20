@@ -17,28 +17,41 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=5)
 
 CONF_CURL_COMMAND = "curl_command"
 
+CONF_DATA_TYPE = "data_type"
+DATA_TYPE_NUMERIC = "numeric"
+DATA_TYPE_TEXT = "text"
+
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 	vol.Required(CONF_CURL_COMMAND): cv.string,
 	vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
 	vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): cv.time_period,
+	vol.Optional(CONF_DATA_TYPE, default=DATA_TYPE_TEXT): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
 })
+
 
 def setup_platform(hass, config, add_entities, discovery_info=None):
 	"""Set up the MyCurl sensor platform."""
 	name = config.get(CONF_NAME)
 	curl_command = config.get(CONF_CURL_COMMAND)
 	scan_interval = config.get(CONF_SCAN_INTERVAL)
-	add_entities([MyCurlSensor(name, curl_command, scan_interval)])
+	data_type = config.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
+	add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)])
+
 
 
 class MyCurlSensor(SensorEntity):
 	"""Representation of a Sensor that runs a curl command."""
 
-	def __init__(self, name, curl_command, scan_interval):
+	def __init__(self, name, curl_command, scan_interval, data_type):
 		self._name = name
 		self._curl_command = curl_command
 		self._state = None
 		self._attr_scan_interval = scan_interval
+		self._data_type = data_type
+		# Set device_class and state_class if numeric
+		if self._data_type == DATA_TYPE_NUMERIC:
+			self._attr_device_class = "measurement"
+			self._attr_state_class = "measurement"
 
 	@property
 	def name(self):
@@ -53,7 +66,19 @@ class MyCurlSensor(SensorEntity):
 		try:
 			result = subprocess.run(self._curl_command, shell=True, capture_output=True, text=True, timeout=30)
 			if result.returncode == 0:
-				self._state = result.stdout.strip()
+				value = result.stdout.strip()
+				if self._data_type == DATA_TYPE_NUMERIC:
+					try:
+						# Try to cast to float or int
+						if "." in value:
+							self._state = float(value)
+						else:
+							self._state = int(value)
+					except Exception:
+						_LOGGER.error("Expected numeric output but got: %s", value)
+						self._state = None
+				else:
+					self._state = value
 			else:
 				_LOGGER.error("Curl command failed: %s", result.stderr)
 				self._state = None
