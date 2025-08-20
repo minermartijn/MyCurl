@@ -1,0 +1,9 @@
+{
+  "domain": "ha_curl_plugin",
+  "name": "HA Curl Plugin",
+  "version": "0.0.1",
+  "documentation": "https://github.com/minermartijn/HA_Curl_Plugin",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@minermartijn"]
+}
