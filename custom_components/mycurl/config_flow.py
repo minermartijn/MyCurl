@@ -76,36 +76,12 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         key_filter = self._key_filter
 
         if user_input is not None:
-            jq_filter = user_input.get(CONF_JQ_FILTER, "").strip()
-            key_select = user_input.get(CONF_KEY_SELECT) or None
-            data_type = user_input.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
-            scan_interval = user_input.get("scan_interval", scan_interval)
-            key_filter = (user_input.get("key_filter") or "").strip()
-            self._key_filter = key_filter
-
-            _LOGGER.debug("select: jq_filter=%s, key_select=%s, data_type=%s, scan_interval=%s, key_filter=%s", jq_filter, key_select, data_type, scan_interval, key_filter)
-
-            # Interpret key selection: '..' means go up
-            if key_select == "..":
-                if self._path:
-                    self._path.pop()
-                key_select = None
-            elif key_select:
-                target = self._resolve_path(self._path + [key_select])
-                if isinstance(target, dict):
-                    # drill down
-                    self._path.append(key_select)
-                    key_select = None
-                else:
-                    # primitive selection sets filter and finalize
-                    jq_filter = self._compose_filter(self._path + [key_select])
-                    self._pending_finalize = True
-
-            # Allow finalization if a filter is present and not drilling down
-            if jq_filter and user_input is not None and (not key_select or self._pending_finalize):
-                value_preview = self._apply_filter(jq_filter)
-                self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
-                _LOGGER.debug("select: value_preview=%s, pending_finalize=%s", value_preview, self._pending_finalize)
+            # For single-key numeric auto, set jq_filter and data_type if not present in user_input
+            if auto_numeric and auto_key:
+                jq_filter = f".{auto_key}"
+                data_type = DATA_TYPE_NUMERIC
+                scan_interval = user_input.get("scan_interval", scan_interval)
+                _LOGGER.debug("auto_numeric submit: jq_filter=%s, data_type=%s, scan_interval=%s", jq_filter, data_type, scan_interval)
                 data: dict[str, Any] = {
                     CONF_NAME: self._name or DEFAULT_NAME,
                     CONF_URL: self._url,
@@ -114,11 +90,52 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                     "scan_interval": scan_interval,
                 }
                 data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
-                _LOGGER.debug("select: creating entry with data: %s", data)
+                _LOGGER.debug("auto_numeric: creating entry with data: %s", data)
                 return self.async_create_entry(title=data[CONF_NAME], data=data)
             else:
-                self._pending_finalize = False
-                _LOGGER.debug("select: not finalizing, re-rendering form")
+                jq_filter = user_input.get(CONF_JQ_FILTER, "").strip()
+                key_select = user_input.get(CONF_KEY_SELECT) or None
+                data_type = user_input.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
+                scan_interval = user_input.get("scan_interval", scan_interval)
+                key_filter = (user_input.get("key_filter") or "").strip()
+                self._key_filter = key_filter
+
+                _LOGGER.debug("select: jq_filter=%s, key_select=%s, data_type=%s, scan_interval=%s, key_filter=%s", jq_filter, key_select, data_type, scan_interval, key_filter)
+
+                # Interpret key selection: '..' means go up
+                if key_select == "..":
+                    if self._path:
+                        self._path.pop()
+                    key_select = None
+                elif key_select:
+                    target = self._resolve_path(self._path + [key_select])
+                    if isinstance(target, dict):
+                        # drill down
+                        self._path.append(key_select)
+                        key_select = None
+                    else:
+                        # primitive selection sets filter and finalize
+                        jq_filter = self._compose_filter(self._path + [key_select])
+                        self._pending_finalize = True
+
+                # Allow finalization if a filter is present and not drilling down
+                if jq_filter and user_input is not None and (not key_select or self._pending_finalize):
+                    value_preview = self._apply_filter(jq_filter)
+                    self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
+                    _LOGGER.debug("select: value_preview=%s, pending_finalize=%s", value_preview, self._pending_finalize)
+                    data: dict[str, Any] = {
+                        CONF_NAME: self._name or DEFAULT_NAME,
+                        CONF_URL: self._url,
+                        CONF_JQ_FILTER: jq_filter,
+                        CONF_DATA_TYPE: data_type,
+                        "scan_interval": scan_interval,
+                    }
+                    data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
+                    _LOGGER.debug("select: creating entry with data: %s", data)
+                    return self.async_create_entry(title=data[CONF_NAME], data=data)
+                else:
+                    self._pending_finalize = False
+                    _LOGGER.debug("select: not finalizing, re-rendering form")
 
         # Determine current container
         current_container = self._resolve_path(self._path) if self._path else self._parsed
