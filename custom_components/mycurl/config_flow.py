@@ -34,9 +34,10 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         self._url: str | None = None
         self._raw_output: str | None = None
         self._parsed: Any | None = None
-        self._suggested_keys: list[str] = []
+    self._suggested_keys: list[str] = []
         self._last_filter_value: str | None = None
         self._path: list[str] = []  # navigation path for nested dicts
+    self._pending_finalize: bool = False
 
     async def async_step_user(self, user_input=None):  # type: ignore[override]
         errors: dict[str, str] = {}
@@ -62,44 +63,38 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
 
     async def async_step_select(self, user_input=None):  # type: ignore[override]
         errors: dict[str, str] = {}
-        jq_filter: str = ""
-        key_select: str | None = None
         data_type = DATA_TYPE_TEXT
         scan_interval = int(DEFAULT_SCAN_INTERVAL.total_seconds())
+        jq_filter = ""
+        key_select: str | None = None
 
         if user_input is not None:
-            refresh = user_input.get(CONF_REFRESH)
-            navigate_back = user_input.get("nav_back")
-            drill = user_input.get("drill")
-            create_flag = user_input.get(CONF_CREATE)
             jq_filter = user_input.get(CONF_JQ_FILTER, "").strip()
             key_select = user_input.get(CONF_KEY_SELECT) or None
             data_type = user_input.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
             scan_interval = user_input.get("scan_interval", scan_interval)
 
-            if refresh:
-                await self._async_fetch_sample()
-                self._path = []
-            elif navigate_back:
+            # Interpret key selection: '..' means go up
+            if key_select == "..":
                 if self._path:
                     self._path.pop()
-            elif drill and key_select:
+                key_select = None
+            elif key_select:
                 target = self._resolve_path(self._path + [key_select])
                 if isinstance(target, dict):
+                    # drill down
                     self._path.append(key_select)
+                    key_select = None
                 else:
-                    # If not a dict we consider selecting the value as filter
-                    if not jq_filter:
-                        jq_filter = self._compose_filter(self._path + [key_select])
-            elif create_flag:
-                # Compose filter from path if jq_filter empty and path not empty
-                if not jq_filter and (self._path or key_select):
-                    jq_filter = self._compose_filter(self._path + ([key_select] if key_select else []))
+                    # primitive selection sets filter and finalize
+                    jq_filter = self._compose_filter(self._path + [key_select])
+                    self._pending_finalize = True
+
+            # If jq_filter manually provided, we will finalize on submit
+            if jq_filter and user_input is not None and not key_select:
                 value_preview = self._apply_filter(jq_filter)
                 self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
-                if not jq_filter:
-                    errors[CONF_JQ_FILTER] = "required"
-                if not errors:
+                if self._pending_finalize:
                     data: dict[str, Any] = {
                         CONF_NAME: self._name or DEFAULT_NAME,
                         CONF_URL: self._url,
@@ -109,52 +104,44 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                     }
                     data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
                     return self.async_create_entry(title=data[CONF_NAME], data=data)
+            else:
+                self._pending_finalize = False
 
-            # If key selected (not drilling) and no jq filter yet, set a tentative preview
-            if key_select and not jq_filter and not drill:
-                tentative = self._compose_filter(self._path + [key_select])
-                value_preview = self._apply_filter(tentative)
-                self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
-            elif jq_filter:
-                value_preview = self._apply_filter(jq_filter)
-                self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
-
-        # Build schema for selection step
-        key_field = {}
+        # Determine current container
         current_container = self._resolve_path(self._path) if self._path else self._parsed
-        self._suggested_keys = []
+        # Build key list
+        keys: list[str] = []
         if isinstance(current_container, dict):
-            self._suggested_keys = [str(k) for k in list(current_container.keys())[:100]]
-        if self._suggested_keys:
-            key_field = {vol.Optional(CONF_KEY_SELECT, default=key_select or ""): vol.In(self._suggested_keys)}
+            keys = [str(k) for k in list(current_container.keys())[:100]]
+        if self._path:
+            keys = [".."] + keys
 
-        schema_dict: dict[Any, Any] = {
+        schema_fields: dict[Any, Any] = {
             vol.Optional(CONF_JQ_FILTER, default=jq_filter): str,
-            **key_field,
             vol.Optional(CONF_DATA_TYPE, default=data_type): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
             vol.Optional("scan_interval", default=scan_interval): int,
-            vol.Optional(CONF_REFRESH, default=False): bool,
-            vol.Optional("nav_back", default=False): bool,
-            vol.Optional("drill", default=False): bool,
-            vol.Optional(CONF_CREATE, default=False): bool,
         }
-        schema = vol.Schema(schema_dict)
+        if keys:
+            schema_fields[vol.Optional(CONF_KEY_SELECT, default="")] = vol.In(["", *keys])
+        schema = vol.Schema(schema_fields)
 
-        # Build description previews
+        # Build description preview
         previews: list[str] = []
         if self._raw_output:
-            previews.append("Raw sample (truncated):\n" + self._raw_output[:500])
-        # Key/value preview table
+            previews.append("Raw (truncated):\n" + self._raw_output[:400])
         if isinstance(current_container, dict):
             kv_lines = []
-            for k in self._suggested_keys[:25]:
+            for k in keys:
+                if k in ("", ".."):
+                    continue
                 val = current_container.get(k)
                 kv_lines.append(f"{k}: {self._summarize_value(val)}")
-            previews.append("Keys:\n" + "\n".join(kv_lines))
+            if kv_lines:
+                previews.append("Keys:\n" + "\n".join(kv_lines[:25]))
         if self._path:
             previews.append("Path: " + ".".join(self._path))
         if self._last_filter_value is not None:
-            previews.append("Value preview:\n" + str(self._last_filter_value))
+            previews.append("Selected value:\n" + self._last_filter_value)
         description_placeholders = {"test_output": "\n\n".join(previews)}
 
         return self.async_show_form(
