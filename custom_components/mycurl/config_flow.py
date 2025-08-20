@@ -125,6 +125,8 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         # Build key list with example values
         keys: list[str] = []
         key_labels: dict[str, str] = {}
+        auto_numeric = False
+        auto_key = None
         if isinstance(current_container, dict):
             raw_keys = [str(k) for k in list(current_container.keys())]
             if key_filter:
@@ -144,8 +146,11 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
             for k in raw_keys:
                 val = current_container.get(k)
                 summary = self._summarize_value(val)
-                # Show example value in label, e.g. keyname (123)
                 key_labels[k] = f"{k} ({summary})"
+                # If only one key and it's numeric, auto-select and set numeric
+                if len(raw_keys) == 1 and isinstance(val, (int, float)):
+                    auto_numeric = True
+                    auto_key = k
             keys = raw_keys
         if self._path:
             keys = [".."] + keys
@@ -153,14 +158,21 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
 
         # Redesign: Data type at top, scan interval as slider, key select after keys
         schema_fields: dict[Any, Any] = {}
-        schema_fields[vol.Optional(CONF_DATA_TYPE, default=data_type)] = vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT])
-        schema_fields[vol.Optional("scan_interval", default=scan_interval)] = vol.All(int, vol.Range(min=5, max=3600))
-        schema_fields[vol.Optional(CONF_JQ_FILTER, default=jq_filter)] = str
-        schema_fields[vol.Optional("key_filter", default=key_filter)] = str
-        if keys:
-            # Use a mapping for key labels
-            key_map = {k: key_labels[k] for k in keys}
-            schema_fields[vol.Optional(CONF_KEY_SELECT, default="")] = vol.In(key_map)
+        # If only one key and it's numeric, set data_type to numeric and hide filters
+        if auto_numeric and auto_key:
+            data_type = DATA_TYPE_NUMERIC
+            jq_filter = f".{auto_key}"
+            # Hide key select, jq_filter, key_filter
+            schema_fields[vol.Optional(CONF_DATA_TYPE, default=data_type)] = vol.In([DATA_TYPE_NUMERIC])
+            schema_fields[vol.Optional("scan_interval", default=scan_interval)] = vol.All(int, vol.Range(min=5, max=3600))
+        else:
+            schema_fields[vol.Optional(CONF_DATA_TYPE, default=data_type)] = vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT])
+            schema_fields[vol.Optional("scan_interval", default=scan_interval)] = vol.All(int, vol.Range(min=5, max=3600))
+            schema_fields[vol.Optional(CONF_JQ_FILTER, default=jq_filter)] = str
+            schema_fields[vol.Optional("key_filter", default=key_filter)] = str
+            if keys:
+                key_map = {k: key_labels[k] for k in keys}
+                schema_fields[vol.Optional(CONF_KEY_SELECT, default="")] = vol.In(key_map)
         schema = vol.Schema(schema_fields)
 
         # Build description preview
