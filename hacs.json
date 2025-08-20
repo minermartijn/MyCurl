@@ -1,8 +1,6 @@
 {
   "name": "MyCurl",
   "content_in_root": false,
-  "domains": ["mycurl"],
-  "country": "any",
   "render_readme": true,
   "category": "integration"
 }

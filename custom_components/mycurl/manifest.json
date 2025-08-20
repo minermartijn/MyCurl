@@ -1,11 +1,12 @@
 {
   "domain": "mycurl",
   "name": "MyCurl",
-  "version": "0.0.6",
+  "version": "0.0.4",
   "documentation": "https://github.com/minermartijn/MyCurl",
   "issue_tracker": "https://github.com/minermartijn/MyCurl/issues",
   "requirements": [],
   "dependencies": [],
   "codeowners": ["@minermartijn"],
-  "config_flow": true
+  "config_flow": true,
+  "iot_class": "local_polling"
 }
