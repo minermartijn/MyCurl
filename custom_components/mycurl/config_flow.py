@@ -127,12 +127,12 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         key_labels: dict[str, str] = {}
         auto_numeric = False
         auto_key = None
+        preview_value = None
         if isinstance(current_container, dict):
             raw_keys = [str(k) for k in list(current_container.keys())]
             if key_filter:
                 raw_keys = [k for k in raw_keys if key_filter.lower() in k.lower()]
             raw_keys = raw_keys[:150]
-            # Sort keys: dict first, list next, then primitives alphabetically within groups
             def sort_key(k: str):
                 v = current_container.get(k)
                 if isinstance(v, dict):
@@ -147,22 +147,44 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 val = current_container.get(k)
                 summary = self._summarize_value(val)
                 key_labels[k] = f"{k} ({summary})"
-                # If only one key and it's numeric, auto-select and set numeric
                 if len(raw_keys) == 1 and isinstance(val, (int, float)):
                     auto_numeric = True
                     auto_key = k
+                    preview_value = val
             keys = raw_keys
         if self._path:
             keys = [".."] + keys
             key_labels[".."] = ".. (up)"
 
+        # Always show a preview of the data above the form
+        previews: list[str] = []
+        if self._parsed is not None:
+            try:
+                pretty_json = json.dumps(self._parsed, indent=2)[:600]
+                previews.append("Sample JSON (trunc):\n" + pretty_json)
+            except Exception:
+                if self._raw_output:
+                    previews.append("Raw (truncated):\n" + self._raw_output[:400])
+        elif self._raw_output:
+            previews.append("Raw (truncated):\n" + self._raw_output[:400])
+        if preview_value is not None:
+            previews.append(f"Auto-selected value: {preview_value} (numeric)")
+        if self._path:
+            previews.append("Path: " + ".".join(self._path))
+        if self._last_filter_value is not None:
+            previews.append("Selected value:\n" + self._last_filter_value)
+        if not jq_filter:
+            previews.append(
+                "Tip: Navigate dicts by selecting a { } key, go back with '..'. Select a primitive (•) to auto-complete the filter. Use 'key_filter' to narrow keys."
+            )
+        description_placeholders = {"test_output": "\n\n".join(previews)}
+
         # Redesign: Data type at top, scan interval as slider, key select after keys
         schema_fields: dict[Any, Any] = {}
-        # If only one key and it's numeric, set data_type to numeric and hide filters
+        # If only one key and it's numeric, set data_type to numeric and hide filters, but allow submit
         if auto_numeric and auto_key:
             data_type = DATA_TYPE_NUMERIC
             jq_filter = f".{auto_key}"
-            # Hide key select, jq_filter, key_filter
             schema_fields[vol.Optional(CONF_DATA_TYPE, default=data_type)] = vol.In([DATA_TYPE_NUMERIC])
             schema_fields[vol.Optional("scan_interval", default=scan_interval)] = vol.All(int, vol.Range(min=5, max=3600))
         else:
