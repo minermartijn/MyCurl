@@ -1,10 +1,11 @@
-# HA Curl Plugin
+
+# MyCurl
 
 A Home Assistant custom component that creates sensors based on the output of curl commands.
 
 ## Installation
 
-1. Copy the `custom_components/ha_curl_plugin` folder to your Home Assistant `custom_components` directory.
+1. Copy the `custom_components/mycurl` folder to your Home Assistant `custom_components` directory.
 2. Restart Home Assistant.
 3. Configure the integration in your `configuration.yaml`.
 
@@ -14,11 +15,12 @@ A Home Assistant custom component that creates sensors based on the output of cu
 
 ## Usage
 
+
 Add an entry like this to your `configuration.yaml`:
 
 ```yaml
 sensor:
-	- platform: ha_curl_plugin
+	- platform: mycurl
 		name: "Bitcoin Price"
 		curl_command: "curl -s https://api.coindesk.com/v1/bpi/currentprice/BTC.json | jq -r .bpi.USD.rate_float"
 		scan_interval: 300

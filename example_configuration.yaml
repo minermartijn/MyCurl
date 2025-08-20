@@ -1,6 +1,6 @@
-# Example configuration.yaml entry for HA Curl Plugin
+# Example configuration.yaml entry for MyCurl
 sensor:
-  - platform: ha_curl_plugin
+  - platform: mycurl
     name: "Bitcoin Price"
     curl_command: "curl -s https://api.coindesk.com/v1/bpi/currentprice/BTC.json | jq -r .bpi.USD.rate_float"
     scan_interval: 300

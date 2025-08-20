@@ -1,5 +1,5 @@
 
-"""Platform for ha_curl_plugin sensor integration."""
+"""Platform for MyCurl sensor integration."""
 import logging
 import subprocess
 from datetime import timedelta
@@ -12,7 +12,7 @@ import homeassistant.helpers.config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_NAME = "Curl Sensor"
+DEFAULT_NAME = "MyCurl Sensor"
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=5)
 
 CONF_CURL_COMMAND = "curl_command"
@@ -24,13 +24,14 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 def setup_platform(hass, config, add_entities, discovery_info=None):
-	"""Set up the Curl sensor platform."""
+	"""Set up the MyCurl sensor platform."""
 	name = config.get(CONF_NAME)
 	curl_command = config.get(CONF_CURL_COMMAND)
 	scan_interval = config.get(CONF_SCAN_INTERVAL)
-	add_entities([CurlSensor(name, curl_command, scan_interval)])
+	add_entities([MyCurlSensor(name, curl_command, scan_interval)])
 
-class CurlSensor(SensorEntity):
+
+class MyCurlSensor(SensorEntity):
 	"""Representation of a Sensor that runs a curl command."""
 
 	def __init__(self, name, curl_command, scan_interval):
