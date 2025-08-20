@@ -42,6 +42,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         self._key_filter: str = ""
 
     async def async_step_user(self, user_input=None):  # type: ignore[override]
+        _LOGGER.debug("async_step_user called with user_input: %s", user_input)
         errors: dict[str, str] = {}
         if user_input is not None:
             name = user_input.get(CONF_NAME, DEFAULT_NAME).strip()
@@ -51,8 +52,10 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
             else:
                 self._name = name or DEFAULT_NAME
                 self._url = url
+                _LOGGER.debug("User provided name: %s, url: %s", self._name, self._url)
                 # Fetch sample immediately
                 await self._async_fetch_sample()
+                _LOGGER.debug("Sample fetched, moving to select step")
                 return await self.async_step_select()
 
         schema = vol.Schema(
@@ -64,6 +67,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     async def async_step_select(self, user_input=None):  # type: ignore[override]
+        _LOGGER.debug("async_step_select called with user_input: %s", user_input)
         errors: dict[str, str] = {}
         data_type = DATA_TYPE_TEXT
         scan_interval = int(DEFAULT_SCAN_INTERVAL.total_seconds())
@@ -78,6 +82,8 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
             scan_interval = user_input.get("scan_interval", scan_interval)
             key_filter = (user_input.get("key_filter") or "").strip()
             self._key_filter = key_filter
+
+            _LOGGER.debug("select: jq_filter=%s, key_select=%s, data_type=%s, scan_interval=%s, key_filter=%s", jq_filter, key_select, data_type, scan_interval, key_filter)
 
             # Interpret key selection: '..' means go up
             if key_select == "..":
@@ -99,6 +105,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
             if jq_filter and user_input is not None and not key_select:
                 value_preview = self._apply_filter(jq_filter)
                 self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
+                _LOGGER.debug("select: value_preview=%s, pending_finalize=%s", value_preview, self._pending_finalize)
                 if self._pending_finalize:
                     data: dict[str, Any] = {
                         CONF_NAME: self._name or DEFAULT_NAME,
@@ -108,9 +115,11 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                         "scan_interval": scan_interval,
                     }
                     data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
+                    _LOGGER.debug("select: creating entry with data: %s", data)
                     return self.async_create_entry(title=data[CONF_NAME], data=data)
             else:
                 self._pending_finalize = False
+                _LOGGER.debug("select: not finalizing, re-rendering form")
 
         # Determine current container
         current_container = self._resolve_path(self._path) if self._path else self._parsed
