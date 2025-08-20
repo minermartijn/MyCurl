@@ -167,15 +167,43 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         """Entry point: ask for preset or custom."""
         return await self.async_step_preset()
 
-    async def async_step_select(self, user_input=None):  # type: ignore[override]
-        _LOGGER.debug("async_step_select called with user_input: %s", user_input)
-        errors: dict[str, str] = {}
-        data_type = DATA_TYPE_TEXT
-        scan_interval = int(DEFAULT_SCAN_INTERVAL.total_seconds())
-        jq_filter = ""
-        key_select: str | None = None
-        key_filter = self._key_filter
 
+        # Determine current container and build key list with example values FIRST
+        current_container = self._resolve_path(self._path) if self._path else self._parsed
+        keys: list[str] = []
+        key_labels: dict[str, str] = {}
+        auto_numeric = False
+        auto_key = None
+        preview_value = None
+        if isinstance(current_container, dict):
+            raw_keys = [str(k) for k in list(current_container.keys())]
+            if key_filter:
+                raw_keys = [k for k in raw_keys if key_filter.lower() in k.lower()]
+            raw_keys = raw_keys[:150]
+            def sort_key(k: str):
+                v = current_container.get(k)
+                if isinstance(v, dict):
+                    group = 0
+                elif isinstance(v, list):
+                    group = 1
+                else:
+                    group = 2
+                return (group, k.lower())
+            raw_keys.sort(key=sort_key)
+            for k in raw_keys:
+                val = current_container.get(k)
+                summary = self._summarize_value(val)
+                key_labels[k] = f"{k} ({summary})"
+                if len(raw_keys) == 1 and isinstance(val, (int, float)):
+                    auto_numeric = True
+                    auto_key = k
+                    preview_value = val
+            keys = raw_keys
+        if self._path:
+            keys = [".."] + keys
+            key_labels[".."] = ".. (up)"
+
+        # Now handle user input
         if user_input is not None:
             # For single-key numeric auto, set jq_filter and data_type if not present in user_input
             if auto_numeric and auto_key:
@@ -237,42 +265,6 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 else:
                     self._pending_finalize = False
                     _LOGGER.debug("select: not finalizing, re-rendering form")
-
-        # Determine current container
-        current_container = self._resolve_path(self._path) if self._path else self._parsed
-        # Build key list with example values
-        keys: list[str] = []
-        key_labels: dict[str, str] = {}
-        auto_numeric = False
-        auto_key = None
-        preview_value = None
-        if isinstance(current_container, dict):
-            raw_keys = [str(k) for k in list(current_container.keys())]
-            if key_filter:
-                raw_keys = [k for k in raw_keys if key_filter.lower() in k.lower()]
-            raw_keys = raw_keys[:150]
-            def sort_key(k: str):
-                v = current_container.get(k)
-                if isinstance(v, dict):
-                    group = 0
-                elif isinstance(v, list):
-                    group = 1
-                else:
-                    group = 2
-                return (group, k.lower())
-            raw_keys.sort(key=sort_key)
-            for k in raw_keys:
-                val = current_container.get(k)
-                summary = self._summarize_value(val)
-                key_labels[k] = f"{k} ({summary})"
-                if len(raw_keys) == 1 and isinstance(val, (int, float)):
-                    auto_numeric = True
-                    auto_key = k
-                    preview_value = val
-            keys = raw_keys
-        if self._path:
-            keys = [".."] + keys
-            key_labels[".."] = ".. (up)"
 
         # Always show a preview of the data above the form
         previews: list[str] = []
