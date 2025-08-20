@@ -1,0 +1,8 @@
+# Example configuration.yaml entry for HA Curl Plugin
+sensor:
+  - platform: ha_curl_plugin
+    name: "Bitcoin Price"
+    curl_command: "curl -s https://api.coindesk.com/v1/bpi/currentprice/BTC.json | jq -r .bpi.USD.rate_float"
+    scan_interval: 300
+
+# This will create a sensor that fetches the current Bitcoin price in USD every 5 minutes.
