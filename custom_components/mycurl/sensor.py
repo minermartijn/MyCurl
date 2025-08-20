@@ -90,6 +90,11 @@ class MyCurlSensor(SensorEntity):
 	def state(self):
 		return self._state
 
+	@property
+	def icon(self):
+		# Use bundled integration icon
+		return "mdi:cloud-download"
+
 	def update(self):
 		"""Fetch new state data for the sensor by running the curl command."""
 		try:
