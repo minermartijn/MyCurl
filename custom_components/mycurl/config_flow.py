@@ -101,30 +101,30 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                     jq_filter = self._compose_filter(self._path + [key_select])
                     self._pending_finalize = True
 
-            # If jq_filter manually provided, we will finalize on submit
-            if jq_filter and user_input is not None and not key_select:
+            # Allow finalization if a filter is present and not drilling down
+            if jq_filter and user_input is not None and (not key_select or self._pending_finalize):
                 value_preview = self._apply_filter(jq_filter)
                 self._last_filter_value = None if value_preview is None else str(value_preview)[:400]
                 _LOGGER.debug("select: value_preview=%s, pending_finalize=%s", value_preview, self._pending_finalize)
-                if self._pending_finalize:
-                    data: dict[str, Any] = {
-                        CONF_NAME: self._name or DEFAULT_NAME,
-                        CONF_URL: self._url,
-                        CONF_JQ_FILTER: jq_filter,
-                        CONF_DATA_TYPE: data_type,
-                        "scan_interval": scan_interval,
-                    }
-                    data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
-                    _LOGGER.debug("select: creating entry with data: %s", data)
-                    return self.async_create_entry(title=data[CONF_NAME], data=data)
+                data: dict[str, Any] = {
+                    CONF_NAME: self._name or DEFAULT_NAME,
+                    CONF_URL: self._url,
+                    CONF_JQ_FILTER: jq_filter,
+                    CONF_DATA_TYPE: data_type,
+                    "scan_interval": scan_interval,
+                }
+                data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
+                _LOGGER.debug("select: creating entry with data: %s", data)
+                return self.async_create_entry(title=data[CONF_NAME], data=data)
             else:
                 self._pending_finalize = False
                 _LOGGER.debug("select: not finalizing, re-rendering form")
 
         # Determine current container
         current_container = self._resolve_path(self._path) if self._path else self._parsed
-        # Build key list
+        # Build key list with example values
         keys: list[str] = []
+        key_labels: dict[str, str] = {}
         if isinstance(current_container, dict):
             raw_keys = [str(k) for k in list(current_container.keys())]
             if key_filter:
@@ -141,18 +141,26 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                     group = 2
                 return (group, k.lower())
             raw_keys.sort(key=sort_key)
+            for k in raw_keys:
+                val = current_container.get(k)
+                summary = self._summarize_value(val)
+                # Show example value in label, e.g. keyname (123)
+                key_labels[k] = f"{k} ({summary})"
             keys = raw_keys
         if self._path:
             keys = [".."] + keys
+            key_labels[".."] = ".. (up)"
 
-        schema_fields: dict[Any, Any] = {
-            vol.Optional(CONF_JQ_FILTER, default=jq_filter): str,
-            vol.Optional("key_filter", default=key_filter): str,
-            vol.Optional(CONF_DATA_TYPE, default=data_type): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
-            vol.Optional("scan_interval", default=scan_interval): int,
-        }
+        # Redesign: Data type at top, scan interval as slider, key select after keys
+        schema_fields: dict[Any, Any] = {}
+        schema_fields[vol.Optional(CONF_DATA_TYPE, default=data_type)] = vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT])
+        schema_fields[vol.Optional("scan_interval", default=scan_interval)] = vol.All(int, vol.Range(min=5, max=3600))
+        schema_fields[vol.Optional(CONF_JQ_FILTER, default=jq_filter)] = str
+        schema_fields[vol.Optional("key_filter", default=key_filter)] = str
         if keys:
-            schema_fields[vol.Optional(CONF_KEY_SELECT, default="")] = vol.In(["", *keys])
+            # Use a mapping for key labels
+            key_map = {k: key_labels[k] for k in keys}
+            schema_fields[vol.Optional(CONF_KEY_SELECT, default="")] = vol.In(key_map)
         schema = vol.Schema(schema_fields)
 
         # Build description preview
