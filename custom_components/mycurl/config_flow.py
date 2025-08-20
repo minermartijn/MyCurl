@@ -15,10 +15,10 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_RUN_TEST = "run_test"
+CONF_FETCH_SAMPLE = "fetch_sample"
 CONF_URL = "url"
 CONF_JQ_FILTER = "jq_filter"
-CONF_ADVANCED = "advanced_mode"
+CONF_KEY_SELECT = "key_select"
 
 
 class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
@@ -27,85 +27,110 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
     VERSION = 1
 
     def __init__(self):
-        self._last_test_output: str | None = None
+        self._raw_output: str | None = None
+        self._filtered_output: str | None = None
+        self._suggested_keys: list[str] = []
 
     async def async_step_user(self, user_input=None):  # type: ignore[override]
         errors: dict[str, str] = {}
         if user_input is not None:
-            run_test = user_input.get(CONF_RUN_TEST, False)
-            advanced = user_input.get(CONF_ADVANCED, False)
+            fetch_sample = user_input.get(CONF_FETCH_SAMPLE, False)
 
-            # Build curl command automatically if not in advanced mode
-            curl_cmd = user_input.get(CONF_CURL_COMMAND, "").strip()
-            if not advanced:
+            # Always derive curl command from URL + jq (simplified UX)
+            curl_cmd = build_curl_command(user_input.get(CONF_URL), user_input.get(CONF_JQ_FILTER)) or ""
+            user_input[CONF_CURL_COMMAND] = curl_cmd
+
+            # If user selected a key from suggestions, populate jq_filter if empty
+            key_select = user_input.get(CONF_KEY_SELECT)
+            if key_select and not user_input.get(CONF_JQ_FILTER):
+                user_input[CONF_JQ_FILTER] = f".{key_select}"
                 curl_cmd = build_curl_command(user_input.get(CONF_URL), user_input.get(CONF_JQ_FILTER)) or ""
                 user_input[CONF_CURL_COMMAND] = curl_cmd
 
-            if run_test:
-                if curl_cmd:
+            if fetch_sample:
+                # Fetch raw data (timeout modest)
+                if user_input.get(CONF_URL):
                     def run_curl():
                         try:
                             result = subprocess.run(
-                                curl_cmd,
+                                curl_cmd or f"curl -s {user_input.get(CONF_URL)}",
                                 shell=True,
                                 capture_output=True,
                                 text=True,
                                 timeout=10,
                             )
                             if result.returncode == 0:
-                                return result.stdout.strip() or "(no output)"
+                                return result.stdout
                             return f"Error: {result.stderr.strip() or 'unknown'}"
                         except Exception as exc:  # noqa: BLE001
-                            _LOGGER.error("Test command exception: %s", exc)
+                            _LOGGER.error("Sample fetch exception: %s", exc)
                             return f"Exception: {exc}"
 
-                    self._last_test_output = await self.hass.async_add_executor_job(run_curl)
+                    raw_text = await self.hass.async_add_executor_job(run_curl)
+                    self._raw_output = raw_text.strip() if isinstance(raw_text, str) else str(raw_text)
+
+                    # Attempt to parse JSON and build suggestions
+                    self._suggested_keys = []
+                    import json  # local import
+                    try:
+                        parsed = json.loads(self._raw_output)
+                        if isinstance(parsed, dict):
+                            self._suggested_keys = [str(k) for k in list(parsed.keys())[:25]]
+                            # Apply simple jq-like filter if provided (dot path)
+                            jq_filter = user_input.get(CONF_JQ_FILTER, "").strip()
+                            if jq_filter.startswith('.') and len(jq_filter) > 1:
+                                val = parsed
+                                for part in jq_filter[1:].split('.'):
+                                    if isinstance(val, dict) and part in val:
+                                        val = val[part]
+                                    else:
+                                        val = None
+                                        break
+                                if val is not None:
+                                    import pprint
+                                    self._filtered_output = pprint.pformat(val)[:800]
+                                else:
+                                    self._filtered_output = "(no match for filter)"
+                            else:
+                                self._filtered_output = None
+                        else:
+                            self._filtered_output = None
+                    except Exception:
+                        self._filtered_output = None
                 else:
-                    self._last_test_output = "Please provide a URL or curl command."
+                    self._raw_output = "Please enter a URL first."
             else:
-                # creating entry path
-                if not curl_cmd:
-                    errors[CONF_CURL_COMMAND] = "required"
+                # Finalize entry
+                if not user_input.get(CONF_URL):
+                    errors[CONF_URL] = "required"
                 if not errors:
                     data = dict(user_input)
-                    for transient in (CONF_RUN_TEST,):
+                    # Remove transient fetch flag & key select
+                    for transient in (CONF_FETCH_SAMPLE, CONF_KEY_SELECT):
                         data.pop(transient, None)
                     return self.async_create_entry(title=data[CONF_NAME], data=data)
 
         defaults = user_input or {}
-        # Schema branches based on advanced flag (persist selection)
-        advanced_flag = defaults.get(CONF_ADVANCED, False)
         base_fields = {
             vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, DEFAULT_NAME)): str,
-            vol.Optional(
-                CONF_DATA_TYPE, default=defaults.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
-            ): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
-            vol.Optional(
-                "scan_interval",
-                default=defaults.get(
-                    "scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())
-                ),
-            ): int,
-            vol.Optional(CONF_RUN_TEST, default=False): bool,
-            vol.Optional(CONF_ADVANCED, default=advanced_flag): bool,
+            vol.Required(CONF_URL, default=defaults.get(CONF_URL, "")): str,
+            vol.Optional(CONF_JQ_FILTER, default=defaults.get(CONF_JQ_FILTER, "")): str,
         }
-        if advanced_flag:
-            base_fields[vol.Required(CONF_CURL_COMMAND, default=defaults.get(CONF_CURL_COMMAND, ""))] = str
-        else:
-            base_fields[vol.Required(CONF_URL, default=defaults.get(CONF_URL, ""))] = str
-            base_fields[vol.Optional(CONF_JQ_FILTER, default=defaults.get(CONF_JQ_FILTER, ""))] = str
-            # Show derived curl command if available
-            if defaults.get(CONF_URL):
-                derived = build_curl_command(defaults.get(CONF_URL), defaults.get(CONF_JQ_FILTER))
-                if derived:
-                    self._last_test_output = (
-                        self._last_test_output
-                        if self._last_test_output
-                        else f"Derived command: {derived}"
-                    )
+        # Add key selector if suggestions available
+        if self._suggested_keys:
+            base_fields[vol.Optional(CONF_KEY_SELECT, default=defaults.get(CONF_KEY_SELECT, ""))] = vol.In(self._suggested_keys)
+        base_fields[vol.Optional(CONF_FETCH_SAMPLE, default=False)] = bool
+        base_fields[vol.Optional(CONF_DATA_TYPE, default=defaults.get(CONF_DATA_TYPE, DATA_TYPE_TEXT))] = vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT])
         data_schema = vol.Schema(base_fields)
 
-        description_placeholders = {"test_output": self._last_test_output or ""}
+        # Build description placeholders for raw and filtered preview (truncated)
+        preview_parts = []
+        if self._raw_output:
+            trunc = self._raw_output[:800]
+            preview_parts.append(f"Raw:\n{trunc}")
+        if self._filtered_output:
+            preview_parts.append(f"Filtered:\n{self._filtered_output}")
+        description_placeholders = {"test_output": "\n\n".join(preview_parts) if preview_parts else ""}
 
         return self.async_show_form(
             step_id="user",
