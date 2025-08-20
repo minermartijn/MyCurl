@@ -38,6 +38,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         self._last_filter_value: str | None = None
         self._path: list[str] = []  # navigation path for nested dicts
         self._pending_finalize: bool = False
+    # current text filter for keys in selection step
     self._key_filter: str = ""
 
     async def async_step_user(self, user_input=None):  # type: ignore[override]
