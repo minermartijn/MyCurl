@@ -1,3 +1,28 @@
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.const import CONF_NAME
+from .sensor import (
+    CONF_CURL_COMMAND,
+    CONF_DATA_TYPE,
+    DATA_TYPE_NUMERIC,
+    DATA_TYPE_TEXT,
+    DEFAULT_NAME,
+    DEFAULT_SCAN_INTERVAL,
+    build_curl_command,
+)
+import subprocess
+import logging
+import json
+from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
+
+CONF_URL = "url"
+CONF_JQ_FILTER = "jq_filter"
+CONF_KEY_SELECT = "key_select"
+CONF_REFRESH = "refresh"
+CONF_CREATE = "create"
+
 PRESETS = {
     "OpenWeatherMap": {
         "name": "OpenWeatherMap",
