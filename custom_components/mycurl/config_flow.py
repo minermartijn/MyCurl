@@ -38,6 +38,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         self._last_filter_value: str | None = None
         self._path: list[str] = []  # navigation path for nested dicts
         self._pending_finalize: bool = False
+    self._key_filter: str = ""
 
     async def async_step_user(self, user_input=None):  # type: ignore[override]
         errors: dict[str, str] = {}
@@ -67,12 +68,15 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         scan_interval = int(DEFAULT_SCAN_INTERVAL.total_seconds())
         jq_filter = ""
         key_select: str | None = None
+    key_filter = self._key_filter
 
         if user_input is not None:
             jq_filter = user_input.get(CONF_JQ_FILTER, "").strip()
             key_select = user_input.get(CONF_KEY_SELECT) or None
             data_type = user_input.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
             scan_interval = user_input.get("scan_interval", scan_interval)
+            key_filter = (user_input.get("key_filter") or "").strip()
+            self._key_filter = key_filter
 
             # Interpret key selection: '..' means go up
             if key_select == "..":
@@ -112,12 +116,28 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
         # Build key list
         keys: list[str] = []
         if isinstance(current_container, dict):
-            keys = [str(k) for k in list(current_container.keys())[:100]]
+            raw_keys = [str(k) for k in list(current_container.keys())]
+            if key_filter:
+                raw_keys = [k for k in raw_keys if key_filter.lower() in k.lower()]
+            raw_keys = raw_keys[:150]
+            # Sort keys: dict first, list next, then primitives alphabetically within groups
+            def sort_key(k: str):
+                v = current_container.get(k)
+                if isinstance(v, dict):
+                    group = 0
+                elif isinstance(v, list):
+                    group = 1
+                else:
+                    group = 2
+                return (group, k.lower())
+            raw_keys.sort(key=sort_key)
+            keys = raw_keys
         if self._path:
             keys = [".."] + keys
 
         schema_fields: dict[Any, Any] = {
             vol.Optional(CONF_JQ_FILTER, default=jq_filter): str,
+            vol.Optional("key_filter", default=key_filter): str,
             vol.Optional(CONF_DATA_TYPE, default=data_type): vol.In([DATA_TYPE_NUMERIC, DATA_TYPE_TEXT]),
             vol.Optional("scan_interval", default=scan_interval): int,
         }
@@ -127,7 +147,14 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
 
         # Build description preview
         previews: list[str] = []
-        if self._raw_output:
+        if self._parsed is not None:
+            try:
+                pretty_json = json.dumps(self._parsed, indent=2)[:600]
+                previews.append("Sample JSON (trunc):\n" + pretty_json)
+            except Exception:
+                if self._raw_output:
+                    previews.append("Raw (truncated):\n" + self._raw_output[:400])
+        elif self._raw_output:
             previews.append("Raw (truncated):\n" + self._raw_output[:400])
         if isinstance(current_container, dict):
             kv_lines = []
@@ -135,13 +162,21 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 if k in ("", ".."):
                     continue
                 val = current_container.get(k)
-                kv_lines.append(f"{k}: {self._summarize_value(val)}")
+                icon = "{ }" if isinstance(val, dict) else ("[ ]" if isinstance(val, list) else "•")
+                summary = self._summarize_value(val)
+                kv_lines.append(f"{icon} {k} = {summary}")
+            if not kv_lines and key_filter:
+                kv_lines.append(f"(no keys match filter '{key_filter}')")
             if kv_lines:
-                previews.append("Keys:\n" + "\n".join(kv_lines[:25]))
+                previews.append("Keys (grouped):\n" + "\n".join(kv_lines[:40]))
         if self._path:
             previews.append("Path: " + ".".join(self._path))
         if self._last_filter_value is not None:
             previews.append("Selected value:\n" + self._last_filter_value)
+        if not jq_filter:
+            previews.append(
+                "Tip: Navigate dicts by selecting a { } key, go back with '..'. Select a primitive (•) to auto-complete the filter. Use 'key_filter' to narrow keys."
+            )
         description_placeholders = {"test_output": "\n\n".join(previews)}
 
         return self.async_show_form(
