@@ -51,11 +51,11 @@ PRESETS = {
         "description": "Get a random trivia question",
         "required_params": [],
         "sensors": [
-            {"key": "results.0.question", "name": "Question", "type": DATA_TYPE_TEXT},
-            {"key": "results.0.correct_answer", "name": "Correct Answer", "type": DATA_TYPE_TEXT},
-            {"key": "results.0.category", "name": "Category", "type": DATA_TYPE_TEXT},
-            {"key": "results.0.difficulty", "name": "Difficulty", "type": DATA_TYPE_TEXT},
-            {"key": "results.0.type", "name": "Type", "type": DATA_TYPE_TEXT},
+            {"key": "results[0].question", "name": "Question", "type": DATA_TYPE_TEXT},
+            {"key": "results[0].correct_answer", "name": "Correct Answer", "type": DATA_TYPE_TEXT},
+            {"key": "results[0].category", "name": "Category", "type": DATA_TYPE_TEXT},
+            {"key": "results[0].difficulty", "name": "Difficulty", "type": DATA_TYPE_TEXT},
+            {"key": "results[0].type", "name": "Type", "type": DATA_TYPE_TEXT},
         ],
     },
     "Random Activity": {
@@ -87,9 +87,9 @@ PRESETS = {
         "description": "Get a random cat image URL",
         "required_params": [],
         "sensors": [
-            {"key": "0.url", "name": "Cat Image URL", "type": DATA_TYPE_TEXT},
-            {"key": "0.width", "name": "Width", "type": DATA_TYPE_NUMERIC},
-            {"key": "0.height", "name": "Height", "type": DATA_TYPE_NUMERIC},
+            {"key": "[0].url", "name": "Cat Image URL", "type": DATA_TYPE_TEXT},
+            {"key": "[0].width", "name": "Width", "type": DATA_TYPE_NUMERIC},
+            {"key": "[0].height", "name": "Height", "type": DATA_TYPE_NUMERIC},
         ],
     },
     "Fox Picture": {
