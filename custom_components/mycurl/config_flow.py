@@ -200,9 +200,23 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 required_params = self._preset_data.get("required_params", [])
                 if required_params:
                     return await self.async_step_preset_params()
-                # No parameters needed, configure URL and proceed
+                # No parameters needed, configure URL and create all sensors with scan_interval=300
                 self._url = self._preset_data["url_template"]
-                return await self.async_step_preset_sensors()
+                sensors = []
+                for sensor in self._preset_data.get("sensors", []):
+                    jq_filter = f".{sensor['key']}" if not sensor['key'].startswith('.') else sensor['key']
+                    sensor_data = {
+                        CONF_NAME: f"{self._name} - {sensor['name']}",
+                        CONF_URL: self._url,
+                        CONF_JQ_FILTER: jq_filter,
+                        CONF_DATA_TYPE: sensor['type'],
+                        CONF_SCAN_INTERVAL: 300,
+                    }
+                    sensor_data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
+                    sensors.append(sensor_data)
+                if len(sensors) == 1:
+                    return self.async_create_entry(title=sensors[0][CONF_NAME], data=sensors[0])
+                return self.async_create_entry(title=self._name, data={"sensors": sensors, "preset": self._preset_data["name"]})
             errors[CONF_PRESET] = "invalid_preset"
 
         # Build preset options
@@ -239,7 +253,22 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                         **self._preset_params,
                     }
                     self._url = url_template.format(**all_params)
-                    return await self.async_step_preset_sensors()
+                    # After params, create all sensors with scan_interval=300
+                    sensors = []
+                    for sensor in self._preset_data.get("sensors", []):
+                        jq_filter = f".{sensor['key']}" if not sensor['key'].startswith('.') else sensor['key']
+                        sensor_data = {
+                            CONF_NAME: f"{self._name} - {sensor['name']}",
+                            CONF_URL: self._url,
+                            CONF_JQ_FILTER: jq_filter,
+                            CONF_DATA_TYPE: sensor['type'],
+                            CONF_SCAN_INTERVAL: 300,
+                        }
+                        sensor_data[CONF_CURL_COMMAND] = build_curl_command(self._url, jq_filter)
+                        sensors.append(sensor_data)
+                    if len(sensors) == 1:
+                        return self.async_create_entry(title=sensors[0][CONF_NAME], data=sensors[0])
+                    return self.async_create_entry(title=self._name, data={"sensors": sensors, "preset": self._preset_data["name"]})
                 except KeyError as e:
                     errors["base"] = f"Missing parameter: {e}"
 
@@ -266,91 +295,7 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
             },
         )
 
-    async def async_step_preset_sensors(self, user_input=None):
-        """Handle preset sensor selection and final configuration."""
-        errors = {}
-        available_sensors = self._preset_data.get("sensors", [])
-        sensor_keys = [f"sensor_{i}" for i in range(len(available_sensors))]
-        if user_input is not None:
-            test_result = await self._async_test_url()
-            if not test_result["success"]:
-                errors["base"] = f"Connection failed: {test_result['error']}"
-            else:
-                selected_sensors = []
-                scan_interval = user_input.get(CONF_SCAN_INTERVAL, 300)
-                for i, sensor in enumerate(available_sensors):
-                    sensor_key = f"sensor_{i}"
-                    if user_input.get(sensor_key, False):
-                        jq_filter = (
-                            f".{sensor['key']}"
-                            if not sensor['key'].startswith('.') else sensor['key']
-                        )
-                        sensor_data = {
-                            CONF_NAME: f"{self._name} - {sensor['name']}",
-                            CONF_URL: self._url,
-                            CONF_JQ_FILTER: jq_filter,
-                            CONF_DATA_TYPE: sensor['type'],
-                            CONF_SCAN_INTERVAL: scan_interval,
-                        }
-                        sensor_data[CONF_CURL_COMMAND] = build_curl_command(
-                            self._url, jq_filter
-                        )
-                        selected_sensors.append(sensor_data)
-                if not selected_sensors:
-                    errors["base"] = "Please select at least one sensor"
-                else:
-                    # If only one selected, create a single entry as before
-                    if len(selected_sensors) == 1:
-                        return self.async_create_entry(
-                            title=selected_sensors[0][CONF_NAME],
-                            data=selected_sensors[0],
-                        )
-                    # If multiple, create a parent entry with all sensors as options
-                    return self.async_create_entry(
-                        title=self._name,
-                        data={"sensors": selected_sensors, "preset": self._preset_data["name"]},
-                    )
-
-        if not self._raw_output:
-            await self._async_fetch_sample()
-        schema_fields = {}
-        for i, sensor in enumerate(available_sensors):
-            sensor_key = f"sensor_{i}"
-            label = f"{sensor['name']}"
-            if sensor.get('unit'):
-                label += f" ({sensor['unit']})"
-            if sensor.get('device_class'):
-                label += f" [{sensor['device_class']}]"
-            # Use the sensor name as the label for the checkbox
-            schema_fields[vol.Optional(sensor_key, default=True, description=label)] = bool
-        schema_fields[vol.Optional(CONF_SCAN_INTERVAL, default=300)] = vol.All(
-            int, vol.Range(min=5, max=3600)
-        )
-        # Use voluptuous descriptions for better UI if supported
-        schema = vol.Schema(schema_fields, extra=vol.PREVENT_EXTRA)
-        preview_lines = [f"URL: {self._url}"]
-        if self._raw_output:
-            try:
-                if self._parsed:
-                    preview_lines.append("Sample response (JSON):")
-                    preview_lines.append(json.dumps(self._parsed, indent=2)[:500])
-                else:
-                    preview_lines.append("Sample response (raw):")
-                    preview_lines.append(self._raw_output[:500])
-            except Exception:
-                preview_lines.append("Could not parse response")
-        preview_lines.append("\nAvailable sensors:")
-        for sensor in available_sensors:
-            value_preview = self._get_sensor_preview(sensor['key'])
-            preview_lines.append(f"• {sensor['name']}: {value_preview}")
-        return self.async_show_form(
-            step_id="preset_sensors",
-            data_schema=schema,
-            errors=errors,
-            description_placeholders={
-                "test_output": "\n".join(preview_lines)
-            },
-        )
+    # Removed async_step_preset_sensors: presets now skip sensor selection and use scan_interval=300
 
     async def async_step_custom(self, user_input=None):
         """Handle custom URL configuration."""

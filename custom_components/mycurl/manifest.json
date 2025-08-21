@@ -1,7 +1,7 @@
 {
   "domain": "mycurl",
   "name": "MyCurl",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "documentation": "https://github.com/minermartijn/MyCurl",
   "issue_tracker": "https://github.com/minermartijn/MyCurl/issues",
   "requirements": [],
