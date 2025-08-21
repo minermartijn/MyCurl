@@ -106,7 +106,6 @@ class MyCurlMultiSensor(CoordinatorEntity, SensorEntity):
 		self._name = name
 		self._jq_filter = jq_filter
 		self._data_type = data_type
-		self._state = None
 		# Set device_class and state_class if numeric
 		if self._data_type == DATA_TYPE_NUMERIC:
 			self._attr_device_class = "measurement"
@@ -118,7 +117,27 @@ class MyCurlMultiSensor(CoordinatorEntity, SensorEntity):
 
 	@property
 	def state(self):
-		return self._state
+		data = self.coordinator.data
+		value = self._extract_value(data)
+		if self._data_type == DATA_TYPE_NUMERIC:
+			try:
+				if value is not None:
+					if isinstance(value, (int, float)):
+						return value
+					elif isinstance(value, str) and "." in value:
+						return float(value)
+					elif isinstance(value, str):
+						return int(value)
+					else:
+						return value
+			except Exception:
+				_LOGGER.error("Expected numeric output but got: %s. Falling back to text.", value)
+				return self._truncate(str(value))
+		else:
+			if value is not None:
+				return self._truncate(str(value))
+			else:
+				return None
 
 	@property
 	def icon(self):
@@ -154,29 +173,6 @@ class MyCurlMultiSensor(CoordinatorEntity, SensorEntity):
 			_LOGGER.error("State for %s is longer than 255, truncating.", self._name)
 			return value[:255]
 		return value
-
-	async def async_update(self):
-		data = self.coordinator.data
-		value = self._extract_value(data)
-		if self._data_type == DATA_TYPE_NUMERIC:
-			try:
-				if value is not None:
-					if isinstance(value, (int, float)):
-						self._state = value
-					elif isinstance(value, str) and "." in value:
-						self._state = float(value)
-					elif isinstance(value, str):
-						self._state = int(value)
-					else:
-						self._state = value
-			except Exception:
-				_LOGGER.error("Expected numeric output but got: %s. Falling back to text.", value)
-				self._state = self._truncate(str(value))
-		else:
-			if value is not None:
-				self._state = self._truncate(str(value))
-			else:
-				self._state = None
 
 
 def build_curl_command(url: str | None, jq_filter: str | None) -> str | None:
