@@ -60,7 +60,7 @@ PRESETS = {
     },
     "Random Activity": {
         "name": "Random Activity",
-        "url_template": "https://www.boredapi.com/api/activity",
+        "url_template": "https://bored-api.appbrewery.com/random",
         "description": "Get a random activity suggestion",
         "required_params": [],
         "sensors": [
@@ -68,7 +68,12 @@ PRESETS = {
             {"key": "type", "name": "Type", "type": DATA_TYPE_TEXT},
             {"key": "participants", "name": "Participants", "type": DATA_TYPE_NUMERIC},
             {"key": "price", "name": "Price", "type": DATA_TYPE_NUMERIC},
-            {"key": "accessibility", "name": "Accessibility", "type": DATA_TYPE_NUMERIC},
+            {"key": "availability", "name": "Availability", "type": DATA_TYPE_NUMERIC},
+            {"key": "accessibility", "name": "Accessibility", "type": DATA_TYPE_TEXT},
+            {"key": "duration", "name": "Duration", "type": DATA_TYPE_TEXT},
+            {"key": "kidFriendly", "name": "Kid Friendly", "type": DATA_TYPE_TEXT},
+            {"key": "link", "name": "Link", "type": DATA_TYPE_TEXT},
+            {"key": "key", "name": "Key", "type": DATA_TYPE_TEXT},
         ],
     },
     "Random Dog Picture": {
