@@ -83,12 +83,7 @@ class MyCurlCoordinator(DataUpdateCoordinator):
 		# Run curl and parse JSON
 		try:
 			proc = await self.hass.async_add_executor_job(
-				subprocess.run, self._curl_command,  # command
-				None,  # input
-				None,  # capture_output
-				True,  # capture_output
-				True,  # text
-				30     # timeout
+				lambda: subprocess.run(self._curl_command, shell=True, capture_output=True, text=True, timeout=30)
 			)
 			if proc.returncode == 0:
 				raw = proc.stdout.strip()
