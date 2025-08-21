@@ -2,6 +2,8 @@
 """Platform for MyCurl sensor integration."""
 import logging
 import subprocess
+import json
+from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 from datetime import timedelta
 
 import voluptuous as vol
@@ -45,15 +47,19 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
 	"""Set up MyCurl sensor from a config entry (UI)."""
 	data = entry.data
-	# Support multi-sensor config entries (from presets)
+	# Multi-sensor config entries (presets/customs)
 	if "sensors" in data and isinstance(data["sensors"], list):
+		url = data["sensors"][0].get("url")
+		scan_interval = timedelta(seconds=data["sensors"][0].get("scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())))
+		curl_cmd = f"curl -s {url.strip()}"
+		coordinator = MyCurlCoordinator(hass, curl_cmd, scan_interval)
+		await coordinator.async_config_entry_first_refresh()
 		sensors = []
 		for sensor_cfg in data["sensors"]:
 			name = sensor_cfg.get(CONF_NAME, DEFAULT_NAME)
-			curl_command = sensor_cfg.get(CONF_CURL_COMMAND)
-			scan_interval = timedelta(seconds=sensor_cfg.get("scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())))
+			jq_filter = sensor_cfg.get("jq_filter")
 			data_type = sensor_cfg.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
-			sensors.append(MyCurlSensor(name, curl_command, scan_interval, data_type))
+			sensors.append(MyCurlMultiSensor(name, jq_filter, data_type, coordinator))
 		async_add_entities(sensors, True)
 		return
 	# Single sensor (legacy or custom)
@@ -66,6 +72,116 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 	scan_interval = timedelta(seconds=data.get("scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())))
 	data_type = data.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
 	async_add_entities([MyCurlSensor(name, curl_command, scan_interval, data_type)], True)
+
+
+class MyCurlCoordinator(DataUpdateCoordinator):
+	def __init__(self, hass, curl_command, scan_interval):
+		super().__init__(hass, _LOGGER, name="MyCurlCoordinator", update_interval=scan_interval)
+		self._curl_command = curl_command
+
+	async def _async_update_data(self):
+		# Run curl and parse JSON
+		try:
+			proc = await self.hass.async_add_executor_job(
+				subprocess.run, self._curl_command,  # command
+				None,  # input
+				None,  # capture_output
+				True,  # capture_output
+				True,  # text
+				30     # timeout
+			)
+			if proc.returncode == 0:
+				raw = proc.stdout.strip()
+				try:
+					return json.loads(raw)
+				except Exception:
+					_LOGGER.error("Failed to parse JSON: %s", raw)
+					return None
+			else:
+				_LOGGER.error("Curl command failed: %s", proc.stderr)
+				return None
+		except Exception as e:
+			_LOGGER.error("Error running curl command: %s", e)
+			return None
+
+
+class MyCurlMultiSensor(CoordinatorEntity, SensorEntity):
+	def __init__(self, name, jq_filter, data_type, coordinator):
+		super().__init__(coordinator)
+		self._name = name
+		self._jq_filter = jq_filter
+		self._data_type = data_type
+		self._state = None
+		# Set device_class and state_class if numeric
+		if self._data_type == DATA_TYPE_NUMERIC:
+			self._attr_device_class = "measurement"
+			self._attr_state_class = "measurement"
+
+	@property
+	def name(self):
+		return self._name
+
+	@property
+	def state(self):
+		return self._state
+
+	@property
+	def icon(self):
+		return "mdi:cloud-download"
+
+	def _extract_value(self, data):
+		# Simple dot/jq filter: .foo.bar or .[0].foo
+		if not data or not self._jq_filter:
+			return None
+		val = data
+		parts = self._jq_filter.lstrip('.').replace('[', '.[').split('.')
+		for part in parts:
+			if not part:
+				continue
+			if part.startswith('[') and part.endswith(']'):
+				try:
+					idx = int(part[1:-1])
+					if isinstance(val, list) and 0 <= idx < len(val):
+						val = val[idx]
+					else:
+						return None
+				except Exception:
+					return None
+			else:
+				if isinstance(val, dict) and part in val:
+					val = val[part]
+				else:
+					return None
+		return val
+
+	def _truncate(self, value):
+		if isinstance(value, str) and len(value) > 255:
+			_LOGGER.error("State for %s is longer than 255, truncating.", self._name)
+			return value[:255]
+		return value
+
+	async def async_update(self):
+		data = self.coordinator.data
+		value = self._extract_value(data)
+		if self._data_type == DATA_TYPE_NUMERIC:
+			try:
+				if value is not None:
+					if isinstance(value, (int, float)):
+						self._state = value
+					elif isinstance(value, str) and "." in value:
+						self._state = float(value)
+					elif isinstance(value, str):
+						self._state = int(value)
+					else:
+						self._state = value
+			except Exception:
+				_LOGGER.error("Expected numeric output but got: %s. Falling back to text.", value)
+				self._state = self._truncate(str(value))
+		else:
+			if value is not None:
+				self._state = self._truncate(str(value))
+			else:
+				self._state = None
 
 
 def build_curl_command(url: str | None, jq_filter: str | None) -> str | None:
