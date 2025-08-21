@@ -35,152 +35,126 @@ CONF_METHOD = "method"
 
 # Enhanced presets with more popular APIs
 PRESETS = {
-    "OpenWeatherMap": {
-        "name": "OpenWeatherMap Weather",
-        "url_template": (
-            "https://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
-        ),
-        "description": "Current weather data for any city",
-        "required_params": ["api_key", "location"],
-        "default_params": {"location": "London"},
-        "sensors": [
-            {
-                "key": "main.temp",
-                "name": "Temperature",
-                "unit": "°C",
-                "type": DATA_TYPE_NUMERIC,
-                "device_class": "temperature",
-            },
-            {
-                "key": "main.humidity",
-                "name": "Humidity",
-                "unit": "%",
-                "type": DATA_TYPE_NUMERIC,
-                "device_class": "humidity",
-            },
-            {
-                "key": "main.pressure",
-                "name": "Pressure",
-                "unit": "hPa",
-                "type": DATA_TYPE_NUMERIC,
-                "device_class": "pressure",
-            },
-            {
-                "key": "weather.0.description",
-                "name": "Weather Description",
-                "type": DATA_TYPE_TEXT,
-            },
-            {
-                "key": "wind.speed",
-                "name": "Wind Speed",
-                "unit": "m/s",
-                "type": DATA_TYPE_NUMERIC,
-            },
-        ],
-    },
-    "CoinDesk_BTC": {
-        "name": "Bitcoin Price (CoinDesk)",
-        "url_template": "https://api.coindesk.com/v1/bpi/currentprice/BTC.json",
-        "description": "Current Bitcoin price in USD",
+    "Random Advice": {
+        "name": "Random Advice",
+        "url_template": "https://api.adviceslip.com/advice",
+        "description": "Get a random piece of advice",
         "required_params": [],
         "sensors": [
-            {
-                "key": "bpi.USD.rate_float",
-                "name": "BTC Price USD",
-                "unit": "$",
-                "type": DATA_TYPE_NUMERIC,
-            },
-            {
-                "key": "time.updated",
-                "name": "Last Updated",
-                "type": DATA_TYPE_TEXT,
-            },
+            {"key": "slip.advice", "name": "Advice", "type": DATA_TYPE_TEXT},
+            {"key": "slip.id", "name": "Advice ID", "type": DATA_TYPE_NUMERIC},
         ],
     },
-    "Philips_Hue": {
-        "name": "Philips Hue Bridge",
-        "url_template": "http://{bridge_ip}/api/{username}/lights",
-        "description": "Philips Hue light status",
-        "required_params": ["bridge_ip", "username"],
-        "sensors": [
-            {
-                "key": "1.state.on",
-                "name": "Light 1 State",
-                "type": DATA_TYPE_TEXT,
-            },
-            {
-                "key": "1.state.bri",
-                "name": "Light 1 Brightness",
-                "type": DATA_TYPE_NUMERIC,
-            },
-        ],
-    },
-    "JSONPlaceholder": {
-        "name": "JSONPlaceholder Test",
-        "url_template": "https://jsonplaceholder.typicode.com/posts/{post_id}",
-        "description": "Test API for development",
-        "required_params": [],
-        "default_params": {"post_id": "1"},
-        "sensors": [
-            {
-                "key": "title",
-                "name": "Post Title",
-                "type": DATA_TYPE_TEXT,
-            },
-            {
-                "key": "userId",
-                "name": "User ID",
-                "type": DATA_TYPE_NUMERIC,
-            },
-        ],
-    },
-    "Speedtest": {
-        "name": "Fast.com Speed Test",
-        "url_template": "https://fast.com/api/v1/speeds",
-        "description": "Internet speed test results",
+    "Trivia Question": {
+        "name": "Trivia Question",
+        "url_template": "https://opentdb.com/api.php?amount=1",
+        "description": "Get a random trivia question",
         "required_params": [],
         "sensors": [
-            {
-                "key": "download",
-                "name": "Download Speed",
-                "unit": "Mbps",
-                "type": DATA_TYPE_NUMERIC,
-            },
-            {
-                "key": "upload",
-                "name": "Upload Speed",
-                "unit": "Mbps",
-                "type": DATA_TYPE_NUMERIC,
-            },
+            {"key": "results.0.question", "name": "Question", "type": DATA_TYPE_TEXT},
+            {"key": "results.0.correct_answer", "name": "Correct Answer", "type": DATA_TYPE_TEXT},
+            {"key": "results.0.category", "name": "Category", "type": DATA_TYPE_TEXT},
+            {"key": "results.0.difficulty", "name": "Difficulty", "type": DATA_TYPE_TEXT},
+            {"key": "results.0.type", "name": "Type", "type": DATA_TYPE_TEXT},
         ],
     },
-    "Generic_IoT": {
-        "name": "Generic IoT Sensor",
-        "url_template": "http://{device_ip}/api/data",
-        "description": "Generic IoT device with temperature/humidity",
-        "required_params": ["device_ip"],
+    "Random Activity": {
+        "name": "Random Activity",
+        "url_template": "https://www.boredapi.com/api/activity",
+        "description": "Get a random activity suggestion",
+        "required_params": [],
         "sensors": [
-            {
-                "key": "temperature",
-                "name": "Temperature",
-                "unit": "°C",
-                "type": DATA_TYPE_NUMERIC,
-                "device_class": "temperature",
-            },
-            {
-                "key": "humidity",
-                "name": "Humidity",
-                "unit": "%",
-                "type": DATA_TYPE_NUMERIC,
-                "device_class": "humidity",
-            },
-            {
-                "key": "battery",
-                "name": "Battery Level",
-                "unit": "%",
-                "type": DATA_TYPE_NUMERIC,
-                "device_class": "battery",
-            },
+            {"key": "activity", "name": "Activity", "type": DATA_TYPE_TEXT},
+            {"key": "type", "name": "Type", "type": DATA_TYPE_TEXT},
+            {"key": "participants", "name": "Participants", "type": DATA_TYPE_NUMERIC},
+            {"key": "price", "name": "Price", "type": DATA_TYPE_NUMERIC},
+            {"key": "accessibility", "name": "Accessibility", "type": DATA_TYPE_NUMERIC},
+        ],
+    },
+    "Random Dog Picture": {
+        "name": "Random Dog Picture",
+        "url_template": "https://dog.ceo/api/breeds/image/random",
+        "description": "Get a random dog image URL",
+        "required_params": [],
+        "sensors": [
+            {"key": "message", "name": "Dog Image URL", "type": DATA_TYPE_TEXT},
+            {"key": "status", "name": "Status", "type": DATA_TYPE_TEXT},
+        ],
+    },
+    "Random Cat Picture": {
+        "name": "Random Cat Picture",
+        "url_template": "https://api.thecatapi.com/v1/images/search",
+        "description": "Get a random cat image URL",
+        "required_params": [],
+        "sensors": [
+            {"key": "0.url", "name": "Cat Image URL", "type": DATA_TYPE_TEXT},
+            {"key": "0.width", "name": "Width", "type": DATA_TYPE_NUMERIC},
+            {"key": "0.height", "name": "Height", "type": DATA_TYPE_NUMERIC},
+        ],
+    },
+    "Fox Picture": {
+        "name": "Fox Picture",
+        "url_template": "https://randomfox.ca/floof/",
+        "description": "Get a random fox image URL",
+        "required_params": [],
+        "sensors": [
+            {"key": "image", "name": "Fox Image URL", "type": DATA_TYPE_TEXT},
+            {"key": "link", "name": "Link", "type": DATA_TYPE_TEXT},
+        ],
+    },
+    "Chuck Norris Joke": {
+        "name": "Chuck Norris Joke",
+        "url_template": "https://api.chucknorris.io/jokes/random",
+        "description": "Get a random Chuck Norris joke",
+        "required_params": [],
+        "sensors": [
+            {"key": "value", "name": "Joke", "type": DATA_TYPE_TEXT},
+            {"key": "icon_url", "name": "Icon URL", "type": DATA_TYPE_TEXT},
+            {"key": "url", "name": "Joke URL", "type": DATA_TYPE_TEXT},
+            {"key": "id", "name": "Joke ID", "type": DATA_TYPE_TEXT},
+        ],
+    },
+    "Kanye West Quote": {
+        "name": "Kanye West Quote",
+        "url_template": "https://api.kanye.rest",
+        "description": "Get a random Kanye West quote",
+        "required_params": [],
+        "sensors": [
+            {"key": "quote", "name": "Quote", "type": DATA_TYPE_TEXT},
+        ],
+    },
+    "Random Cat Fact": {
+        "name": "Random Cat Fact",
+        "url_template": "https://catfact.ninja/fact",
+        "description": "Get a random cat fact",
+        "required_params": [],
+        "sensors": [
+            {"key": "fact", "name": "Fact", "type": DATA_TYPE_TEXT},
+            {"key": "length", "name": "Length", "type": DATA_TYPE_NUMERIC},
+        ],
+    },
+    "Random Useless Fact": {
+        "name": "Random Useless Fact",
+        "url_template": "https://uselessfacts.jsph.pl/api/v2/facts/random?language=en",
+        "description": "Get a random useless fact",
+        "required_params": [],
+        "sensors": [
+            {"key": "text", "name": "Fact", "type": DATA_TYPE_TEXT},
+            {"key": "source", "name": "Source", "type": DATA_TYPE_TEXT},
+            {"key": "source_url", "name": "Source URL", "type": DATA_TYPE_TEXT},
+            {"key": "permalink", "name": "Permalink", "type": DATA_TYPE_TEXT},
+        ],
+    },
+    "Random Joke": {
+        "name": "Random Joke",
+        "url_template": "https://official-joke-api.appspot.com/random_joke",
+        "description": "Get a random joke (setup and punchline)",
+        "required_params": [],
+        "sensors": [
+            {"key": "setup", "name": "Setup", "type": DATA_TYPE_TEXT},
+            {"key": "punchline", "name": "Punchline", "type": DATA_TYPE_TEXT},
+            {"key": "type", "name": "Type", "type": DATA_TYPE_TEXT},
+            {"key": "id", "name": "Joke ID", "type": DATA_TYPE_NUMERIC},
         ],
     },
 }
