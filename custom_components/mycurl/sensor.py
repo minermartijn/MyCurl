@@ -110,9 +110,17 @@ class MyCurlSensor(SensorEntity):
 						else:
 							self._state = int(value)
 					except Exception:
-						_LOGGER.error("Expected numeric output but got: %s", value)
-						self._state = None
+						_LOGGER.error("Expected numeric output but got: %s. Falling back to text.", value)
+						# Fallback: treat as text, but truncate if needed
+						if len(value) > 255:
+							_LOGGER.error("State for %s is longer than 255, truncating.", self._name)
+							value = value[:255]
+						self._state = value
 				else:
+					# Truncate text state if needed
+					if len(value) > 255:
+						_LOGGER.error("State for %s is longer than 255, truncating.", self._name)
+						value = value[:255]
 					self._state = value
 			else:
 				_LOGGER.error("Curl command failed: %s", result.stderr)
