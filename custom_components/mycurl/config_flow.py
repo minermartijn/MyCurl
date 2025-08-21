@@ -269,13 +269,14 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
     async def async_step_preset_sensors(self, user_input=None):
         """Handle preset sensor selection and final configuration."""
         errors = {}
+        available_sensors = self._preset_data.get("sensors", [])
+        sensor_keys = [f"sensor_{i}" for i in range(len(available_sensors))]
         if user_input is not None:
             test_result = await self._async_test_url()
             if not test_result["success"]:
                 errors["base"] = f"Connection failed: {test_result['error']}"
             else:
                 selected_sensors = []
-                available_sensors = self._preset_data.get("sensors", [])
                 scan_interval = user_input.get(CONF_SCAN_INTERVAL, 300)
                 for i, sensor in enumerate(available_sensors):
                     sensor_key = f"sensor_{i}"
@@ -298,15 +299,21 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 if not selected_sensors:
                     errors["base"] = "Please select at least one sensor"
                 else:
+                    # If only one selected, create a single entry as before
+                    if len(selected_sensors) == 1:
+                        return self.async_create_entry(
+                            title=selected_sensors[0][CONF_NAME],
+                            data=selected_sensors[0],
+                        )
+                    # If multiple, create a parent entry with all sensors as options
                     return self.async_create_entry(
-                        title=selected_sensors[0][CONF_NAME],
-                        data=selected_sensors[0],
+                        title=self._name,
+                        data={"sensors": selected_sensors, "preset": self._preset_data["name"]},
                     )
 
         if not self._raw_output:
             await self._async_fetch_sample()
         schema_fields = {}
-        available_sensors = self._preset_data.get("sensors", [])
         for i, sensor in enumerate(available_sensors):
             sensor_key = f"sensor_{i}"
             label = f"{sensor['name']}"
@@ -314,11 +321,13 @@ class MyCurlConfigFlow(config_entries.ConfigFlow, domain="mycurl"):
                 label += f" ({sensor['unit']})"
             if sensor.get('device_class'):
                 label += f" [{sensor['device_class']}]"
-            schema_fields[vol.Optional(sensor_key, default=True)] = bool
+            # Use the sensor name as the label for the checkbox
+            schema_fields[vol.Optional(sensor_key, default=True, description=label)] = bool
         schema_fields[vol.Optional(CONF_SCAN_INTERVAL, default=300)] = vol.All(
             int, vol.Range(min=5, max=3600)
         )
-        schema = vol.Schema(schema_fields)
+        # Use voluptuous descriptions for better UI if supported
+        schema = vol.Schema(schema_fields, extra=vol.PREVENT_EXTRA)
         preview_lines = [f"URL: {self._url}"]
         if self._raw_output:
             try:
