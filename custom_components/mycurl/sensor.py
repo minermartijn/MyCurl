@@ -45,6 +45,18 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
 	"""Set up MyCurl sensor from a config entry (UI)."""
 	data = entry.data
+	# Support multi-sensor config entries (from presets)
+	if "sensors" in data and isinstance(data["sensors"], list):
+		sensors = []
+		for sensor_cfg in data["sensors"]:
+			name = sensor_cfg.get(CONF_NAME, DEFAULT_NAME)
+			curl_command = sensor_cfg.get(CONF_CURL_COMMAND)
+			scan_interval = timedelta(seconds=sensor_cfg.get("scan_interval", int(DEFAULT_SCAN_INTERVAL.total_seconds())))
+			data_type = sensor_cfg.get(CONF_DATA_TYPE, DATA_TYPE_TEXT)
+			sensors.append(MyCurlSensor(name, curl_command, scan_interval, data_type))
+		async_add_entities(sensors, True)
+		return
+	# Single sensor (legacy or custom)
 	name = data.get(CONF_NAME, DEFAULT_NAME)
 	curl_command = data.get(CONF_CURL_COMMAND)
 	# Backwards compatibility: build curl command if only URL provided
